@@ -43,35 +43,27 @@ class FFmpeg(EventEmitter):
 
     def option(self, key, value=None):
         self._global_options[key] = value
-        return self
 
     def input(self, url, options=None, **kwargs):
         if options is None:
             options = {}
-
         self._input_files.append(FFmpeg._File(url=url, options={**options, **kwargs}))
-        return self
 
     def output(self, url, options=None, **kwargs):
         if options is None:
             options = {}
-
         self._output_files.append(FFmpeg._File(url=url, options={**options, **kwargs}))
-        return self
 
     async def execute(self, stream=None):
         if self._executed:
             raise FFmpegError('FFmpeg is already executed')
-
         arguments = self._build()
         self.emit('start', arguments)
-
         self._process = await _create_subprocess(
             *arguments,
             stdin=asyncio.subprocess.PIPE if stream else None,
             stderr=asyncio.subprocess.PIPE,
         )
-
         self._executed = True
         await asyncio.wait([
             self._write_stdin(stream),
@@ -89,19 +81,16 @@ class FFmpeg(EventEmitter):
     def terminate(self):
         if not self._executed:
             raise FFmpegError('FFmpeg is not executed')
-
         sigterm = signal.SIGTERM
         if _windows:  # On Windows, SIGTERM -> TerminateProcess()
             # https://github.com/FFmpeg/FFmpeg/blob/master/fftools/ffmpeg.c#L356
             sigterm = signal.CTRL_BREAK_EVENT
-
         self._terminated = True
         self._process.send_signal(sigterm)
 
     async def _write_stdin(self, stream):
         if not stream:
-            return
-
+            return False
         while not stream.at_eof():
             self._process.stdin.write(await stream.read(1024))
         self._process.stdin.write_eof()
@@ -118,13 +107,10 @@ class FFmpeg(EventEmitter):
     def _build(self):
         arguments = [self._executable]
         arguments.extend(build_options(self._global_options))
-
         for file in self._input_files:
             arguments.extend(build_options(file.options))
             arguments.extend(['-i', file.url])
-
         for file in self._output_files:
             arguments.extend(build_options(file.options))
             arguments.append(file.url)
-
         return arguments
